@@ -1,0 +1,18 @@
+'use client';
+import { useAppStore } from '@/components/app-store';
+import { KPI, PageHead } from '@/components/ui';
+import { money } from '@/lib/utils';
+
+export default function Reports(){
+ const {state,selectedBranch}=useAppStore();
+ const sales=state.sales.filter(s=>!s.reversed&&(selectedBranch==='all'||s.branchId===selectedBranch));
+ const inv=state.inventory.filter(i=>selectedBranch==='all'||i.branchId===selectedBranch);
+ const revenue=sales.reduce((a,b)=>a+b.total,0);const cogs=sales.reduce((sum,s)=>sum+s.items.reduce((a,i)=>a+i.quantity*i.unitCost,0),0);const gross=revenue-cogs;
+ const inventoryValue=inv.reduce((a,i)=>a+i.quantity*(state.books.find(b=>b.id===i.bookId)?.costPrice||0),0); const retailValue=inv.reduce((a,i)=>a+i.quantity*(state.books.find(b=>b.id===i.bookId)?.sellingPrice||0),0);
+ const byBranch=state.branches.map(br=>({br,revenue:state.sales.filter(s=>!s.reversed&&s.branchId===br.id).reduce((a,b)=>a+b.total,0),copies:state.inventory.filter(i=>i.branchId===br.id).reduce((a,b)=>a+b.quantity,0)}));
+ const byBook=state.books.map(book=>({book,qty:sales.reduce((n,s)=>n+s.items.filter(i=>i.bookId===book.id).reduce((a,i)=>a+i.quantity,0),0),revenue:sales.reduce((n,s)=>n+s.items.filter(i=>i.bookId===book.id).reduce((a,i)=>a+i.quantity*i.unitPrice,0),0)})).sort((a,b)=>b.qty-a.qty);
+ return <><PageHead title="Reports" subtitle="Sales, profit, inventory valuation and branch performance from one view." actions={<><button className="btn" onClick={()=>window.print()}>Print / PDF</button><button className="btn primary" onClick={()=>{const rows=['Book,Units,Revenue',...byBook.map(x=>`"${x.book.title.replaceAll('"','""')}",${x.qty},${x.revenue}`)];const blob=new Blob([rows.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='book-sales-report.csv';a.click();URL.revokeObjectURL(a.href)}}>Export CSV</button></>}/>
+ <div className="grid kpis"><KPI label="Sales revenue" value={money(revenue,state.settings.currency)}/><KPI label="Gross profit" value={money(gross,state.settings.currency)} hint={revenue?`${Math.round(gross/revenue*100)}% gross margin`:'No sales'}/><KPI label="Inventory at cost" value={money(inventoryValue,state.settings.currency)}/><KPI label="Inventory at retail" value={money(retailValue,state.settings.currency)}/></div>
+ <div className="split"><section className="card section"><h2>Sales by title</h2><div className="tablewrap"><table className="table"><thead><tr><th>Book</th><th>Units</th><th>Revenue</th></tr></thead><tbody>{byBook.map(x=><tr key={x.book.id}><td className="strong">{x.book.title}</td><td>{x.qty}</td><td>{money(x.revenue,state.settings.currency)}</td></tr>)}</tbody></table></div></section><section className="card section"><h2>Branch performance</h2>{byBranch.map(x=><div className="activity" key={x.br.id}><div className="dot"/><div><strong>{x.br.name}</strong><span>{money(x.revenue,state.settings.currency)} revenue · {x.copies} copies on hand</span></div></div>)}</section></div>
+ <section className="card section" style={{marginTop:16}}><h2>Inventory valuation</h2><div className="tablewrap"><table className="table"><thead><tr><th>Book</th><th>Copies</th><th>Cost value</th><th>Retail value</th><th>Potential gross margin</th></tr></thead><tbody>{state.books.map(b=>{const copies=inv.filter(i=>i.bookId===b.id).reduce((a,i)=>a+i.quantity,0);return <tr key={b.id}><td className="strong">{b.title}</td><td>{copies}</td><td>{money(copies*b.costPrice,state.settings.currency)}</td><td>{money(copies*b.sellingPrice,state.settings.currency)}</td><td>{money(copies*(b.sellingPrice-b.costPrice),state.settings.currency)}</td></tr>})}</tbody></table></div></section></>
+}
